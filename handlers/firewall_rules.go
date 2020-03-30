@@ -13,15 +13,17 @@ import (
 	"google.golang.org/api/googleapi"
 )
 
+var (
+	manager models.FirewallRuleManager
+)
+
+func init() {
+	manager, _ = models.NewFirewallRuleClient()
+}
+
 // ListFirewallRuleHandler returns a set of firewall rules
 func ListFirewallRuleHandler(w http.ResponseWriter, r *http.Request) {
 	project, serviceProject, application, _ := helpers.GetMuxVars(r)
-
-	manager, err := models.NewFirewallRuleClient()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 
 	applicationRule, err := services.ListFirewallRule(manager, project, serviceProject, application)
 	if err != nil {
@@ -40,12 +42,6 @@ func ListFirewallRuleHandler(w http.ResponseWriter, r *http.Request) {
 // GetFirewallRuleHandler return mathing firewall rule
 func GetFirewallRuleHandler(w http.ResponseWriter, r *http.Request) {
 	project, serviceProject, application, rule := helpers.GetMuxVars(r)
-
-	manager, err := models.NewFirewallRuleClient()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 
 	applicationRule, err := services.GetFirewallRule(manager, project, serviceProject, application, rule)
 
@@ -82,12 +78,6 @@ func CreateFirewallRuleHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	manager, err := models.NewFirewallRuleClient()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	applicationRule, err := services.CreateFirewallRule(manager, project, serviceProject, application, rule, body)
 	// Handle Google Error
 	if value, ok := err.(*googleapi.Error); ok {
@@ -116,13 +106,7 @@ func DeleteFirewallRuleHandler(w http.ResponseWriter, r *http.Request) {
 	project, serviceProject, application, rule := helpers.GetMuxVars(r)
 	logrus.Debugf("Ask to delete rule %s %s %s %s\n", project, serviceProject, application, rule)
 
-	manager, err := models.NewFirewallRuleClient()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	err = services.DeleteFirewallRule(manager, project, serviceProject, application, rule)
+	err := services.DeleteFirewallRule(manager, project, serviceProject, application, rule)
 
 	// Handle Google Error
 	if value, ok := err.(*googleapi.Error); ok {
