@@ -10,6 +10,7 @@ import (
 
 // InitLogger initializes logrus to be compatible with google stackdriver
 func InitLogger() {
+	logrus.SetLevel(logrus.DebugLevel)
 	// Set logger as Stackdriver compliant when runtime is GCP
 	// https://cloud.google.com/run/docs/reference/container-contract#env-vars
 	if os.Getenv("K_SERVICE") != "" {
