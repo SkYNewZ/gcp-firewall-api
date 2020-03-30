@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"time"
 
 	"github.com/adeo/iwc-gcp-firewall-api/handlers"
 	"github.com/adeo/iwc-gcp-firewall-api/helpers"
@@ -43,26 +46,53 @@ func main() {
 	if os.Getenv("CI") == "" {
 		r.Use(loggingMiddleware)
 	}
-	r.Use(contentTypeMiddleware)
 
 	// Manage sets of rules
 	managerRouter := r.PathPrefix("/project/{project}/service_project/{service_project}/application/{application}").Subrouter()
 	managerRouter.Path("").Methods("GET").HandlerFunc(handlers.ListFirewallRuleHandler)
+	managerRouter.Use(contentTypeMiddleware)
 
 	// Manage a specific rule
 	ruleRouter := r.PathPrefix("/project/{project}/service_project/{service_project}/application/{application}/firewall_rule/{rule}").Subrouter()
 	ruleRouter.Path("").Methods("POST").HandlerFunc(handlers.CreateFirewallRuleHandler)
 	ruleRouter.Path("").Methods("GET").HandlerFunc(handlers.GetFirewallRuleHandler)
 	ruleRouter.Path("").Methods("DELETE").HandlerFunc(handlers.DeleteFirewallRuleHandler)
+	ruleRouter.Use(contentTypeMiddleware)
 
-	r.Path("/_health").Methods("GET").HandlerFunc(handlers.HealthCheckHandler)
+	// Other endpoints
+	otherRouter := r.PathPrefix("").Subrouter()
+	otherRouter.Path("/_health").Methods("GET").HandlerFunc(handlers.HealthCheckHandler)
+	otherRouter.Use(contentTypeMiddleware)
 
+	// Init logger to be Stackdriver compliant
 	helpers.InitLogger()
 
 	srv := http.Server{
-		Addr:    fmt.Sprintf(":%s", port),
-		Handler: r,
+		Addr: fmt.Sprintf(":%s", port),
+		// Good practice to set timeouts to avoid Slowloris attacks.
+		WriteTimeout: time.Second * 15,
+		ReadTimeout:  time.Second * 15,
+		IdleTimeout:  time.Second * 60,
+		Handler:      r,
 	}
-	logrus.Printf("Listening on port %s", port)
-	logrus.Print(srv.ListenAndServe())
+
+	// Run our server in a goroutine so that it doesn't block.
+	go func() {
+		logrus.Printf("Listening on port %s", port)
+		if err := srv.ListenAndServe(); err != nil {
+			logrus.Println(err)
+		}
+	}()
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+
+	<-c
+
+	// Create a deadline to wait for.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	srv.Shutdown(ctx)
+	logrus.Println("Shutting down server")
+	os.Exit(0)
 }
