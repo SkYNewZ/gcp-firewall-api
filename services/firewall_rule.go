@@ -26,7 +26,7 @@ func ListFirewallRule(manager models.FirewallRuleManager, project, serviceProjec
 		ServiceProject: serviceProject,
 	}
 
-	var endUserResultRules models.FirewallRules
+	endUserResultRules := make(models.FirewallRules, 0)
 
 	// For each obtains Google rules
 	prefix := fmt.Sprintf("%s-%s-", serviceProject, application)
