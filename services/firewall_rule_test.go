@@ -117,18 +117,29 @@ func TestListFirewallRule(t *testing.T) {
 		}
 	}
 
+	// Test no rule are returned
+	applicationRule, err := ListFirewallRule(manager, project, serviceProjects[0], "non-existing-application")
+	if err != nil {
+		t.Fatalf("Expected error during ListApplicationFirewallRules on a non-existing-application")
+	}
+
+	if len(applicationRule.Rules) > 0 {
+		t.Errorf("No rule have been created. Retuned list should contains 0 elements")
+	}
+
 	// Ask for non-existing project
-	_, err := ListFirewallRule(manager, "non-existing-project", serviceProjects[0], applications[0])
+	_, err = ListFirewallRule(manager, "non-existing-project", serviceProjects[0], applications[0])
 	if err == nil {
 		t.Fatalf("Expected error during ListApplicationFirewallRules on a non-existing project")
 	}
 
 	// Ask for one application in a random project
-	applicationRule, err := ListFirewallRule(manager, project, serviceProjects[0], applications[0])
+	applicationRule, err = ListFirewallRule(manager, project, serviceProjects[0], applications[0])
 	if err != nil {
 		t.Fatalf("Something wrong during ListApplicationFirewallRules. Got error : %v\n", err)
 	}
 
+	// Ensure we obtain a single rule
 	if len(applicationRule.Rules) != 1 {
 		t.Errorf("Wrong rules count for project %s and application %s. Got %d expected %d", serviceProjects[0], applications[0], len(applicationRule.Rules), 1)
 	}
