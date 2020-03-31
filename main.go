@@ -14,7 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// log access log
+// Enable http access log on testing
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logrus.WithFields(logrus.Fields{
@@ -26,7 +26,7 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// define JSON as default return content type
+// Define JSON as default returned content type
 func contentTypeMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-type", "application/json; charset=utf-8")
@@ -35,37 +35,42 @@ func contentTypeMiddleware(next http.Handler) http.Handler {
 }
 
 func main() {
+	// Init logger to be Stackdriver compliant
+	helpers.InitLogger()
 
+	// Set port to listen to
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
 	r := mux.NewRouter().StrictSlash(true)
-	// Disable http access log on testing
 	if os.Getenv("CI") == "" {
 		r.Use(loggingMiddleware)
 	}
 
-	// Manage sets of rules
-	managerRouter := r.PathPrefix("/project/{project}/service_project/{service_project}/application/{application}").Subrouter()
-	managerRouter.Path("").Methods("GET").HandlerFunc(handlers.ListFirewallRuleHandler)
-	managerRouter.Use(contentTypeMiddleware)
+	// Define routers
+	projectRouter := r.PathPrefix("/project/{project}").Subrouter()
+	serviceProjectRouter := projectRouter.PathPrefix("/service_project/{service_project}").Subrouter()
+	applicationRouter := serviceProjectRouter.PathPrefix("/application/{application}").Subrouter()
+	ruleRouter := applicationRouter.PathPrefix("/firewall_rule/{rule}").Subrouter()
+
+	// Manage sets of rules routes
+	applicationRouter.Path("").Methods(http.MethodGet).HandlerFunc(handlers.ListFirewallRuleHandler)
 
 	// Manage a specific rule
-	ruleRouter := r.PathPrefix("/project/{project}/service_project/{service_project}/application/{application}/firewall_rule/{rule}").Subrouter()
-	ruleRouter.Path("").Methods("POST").HandlerFunc(handlers.CreateFirewallRuleHandler)
-	ruleRouter.Path("").Methods("GET").HandlerFunc(handlers.GetFirewallRuleHandler)
-	ruleRouter.Path("").Methods("DELETE").HandlerFunc(handlers.DeleteFirewallRuleHandler)
-	ruleRouter.Use(contentTypeMiddleware)
+	ruleRouter.Path("").Methods(http.MethodPost).HandlerFunc(handlers.CreateFirewallRuleHandler)
+	ruleRouter.Path("").Methods(http.MethodGet).HandlerFunc(handlers.GetFirewallRuleHandler)
+	ruleRouter.Path("").Methods(http.MethodDelete).HandlerFunc(handlers.DeleteFirewallRuleHandler)
 
-	// Other endpoints
-	otherRouter := r.PathPrefix("").Subrouter()
-	otherRouter.Path("/_health").Methods("GET").HandlerFunc(handlers.HealthCheckHandler)
-	otherRouter.Use(contentTypeMiddleware)
+	// Other endpoints routes
+	r.Path("/_health").Methods(http.MethodGet).HandlerFunc(handlers.HealthCheckHandler)
 
-	// Init logger to be Stackdriver compliant
-	helpers.InitLogger()
+	// Override default error handlers
+	r.MethodNotAllowedHandler = http.HandlerFunc(handlers.MethodNotAllowedHandler)
+	r.NotFoundHandler = http.HandlerFunc(handlers.NotFoundHandler)
+
+	r.Use(contentTypeMiddleware)
 
 	srv := http.Server{
 		Addr: fmt.Sprintf(":%s", port),

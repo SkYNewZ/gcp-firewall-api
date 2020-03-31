@@ -30,3 +30,14 @@ func (g *GoogleApplicationError) JSON() string {
 	res, _ := json.Marshal(g)
 	return string(res)
 }
+
+// RouterError describe a generic error response
+type RouterError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func (e *RouterError) Error() string {
+	res, _ := json.Marshal(e)
+	return string(res)
+}
