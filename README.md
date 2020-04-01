@@ -2,39 +2,88 @@
 
 This repository provides an API to create and manage Firewall rules in a GCP host project using API for an application.
 
-Want to go further ?
+## Getting started
 
-- [ ] Add Authentication
-- [ ] Manage RBAC
-- [ ] Add acceptance criterias on rules
-- [ ] Force targetTags as we force rule Name
+THis project is deployed on 2 environements:
 
-## Disclamer
+- Production: https://api.cloudservices.tech.adeo.cloud
+- Stagging: https://gcp-firewall-api-2q3jhrmuuq-ew.a.run.app
 
-DEMO only. Do not use it on production. _Done over a long night during covid lockdown...._
-
-## Test it !
-
-Create rules for an applications
-
-```bash
-$ curl -X POST 127.0.0.1:8080/project/cka-jnu/service_project/foo-sp/application/kubernetes-the-hard-way --data '[{"CustomName": "test-ssh", "Rule": {"name": "dummy","network": "global/networks/default","allowed": [{"IPProtocol": "TCP", "ports": ["22"]}],"targetTags": ["foo"]}}]'
-```
-
-Verify rules for the application created
-
-```bash
-$ curl 127.0.0.1:8080/project/cka-jnu/service_project/foo-sp/application/kubernetes-the-hard-way | jq
-```
-
-Delete rules for the application created
-
-```bash
-$ curl -X DELETE 127.0.0.1:8080/project/cka-jnu/service_project/foo-sp/application/kubernetes-the-hard-way | jq
-```
-
-## Rules
+## Create a rule
 
 Rules are based on Google compute API [rest/v1/firewalls](https://cloud.google.com/compute/docs/reference/rest/v1/firewalls)
+So, create a Google Rule, for example:
 
-The tool erase the rule name (if provided) to set a custom name like `serviceProject-applicationName-customName` to avoid dupplicated name and make easier list, update of deletion.
+```json
+{
+  "network": "global/networks/lh-network",
+  "allowed": [
+    {
+      "IPProtocol": "tcp",
+      "ports": ["443"]
+    }
+  ]
+}
+```
+
+And `POST` it to `/project/<LH>/service_project/<LZV2>/application/<APP>/firewall_rule/<NAME>`.
+
+- `<LH>` Landing Hub project ID which host your Landing Zone v2
+- `<LZV2>` your Landing Zone v2 project ID
+- `<APP>` an arbitrary application name
+- `<NAME>` your wanted firewall rule name
+
+The final firewall rule name will be `<LZV2>-<APP>-<NAME>`. **It will be the same for the target tag.**
+
+It will return the given [schema](#schema)
+
+## List your application rules
+
+`GET /project/<LH>/service_project/<LZV2>/application/<APP>/`
+
+It will return the given [schema](#schema)
+
+## Get a specific rule
+
+`GET /project/<LH>/service_project/<LZV2>/application/<APP>/firewall_rule/<NAME>`
+
+It will return the given [schema](#schema)
+
+## Delete a specific rule
+
+`DELETE /project/<LH>/service_project/<LZV2>/application/<APP>/firewall_rule/<NAME>`
+
+It will return the given [schema](#schema)
+
+## Schema
+
+```json
+{
+  "application": "<APP>",
+  "data": [
+    {
+      "custom_name": "<NAME>",
+      "item": "*GoogleRule"
+    }
+  ],
+  "project": "<LH>",
+  "service_project": "<LZV2>"
+}
+```
+
+## Deployement
+
+Deployements are made by GitLabCI with service accounts.
+
+Deployer service account have roles:
+
+- `roles/run.admin` to deploy a new Cloud Run revision
+- `roles/storage.admin` to store built Docker image
+- `roles/iam.serviceAccountUser` https://cloud.google.com/run/docs/reference/iam/roles#additional-configuration
+
+Runtime service account, **on each environement**, have roles:
+
+- `roles/viewer` to view Compute resources
+- `roles/compute.securityAdmin` to create network resources (of course to create firewall rules)
+
+All theses credentials are stored in Vault on path `secret/gcp-firewall-api/*`
