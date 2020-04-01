@@ -5,6 +5,7 @@ import (
 
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
 )
 
 // FirewallRule descibe a firewall rule
@@ -39,53 +40,54 @@ type FirewallRuleClient struct {
 
 // NewFirewallRuleClient FirewallRuleClient contructor
 func NewFirewallRuleClient() (*FirewallRuleClient, error) {
-	ctx := context.Background()
-	c, err := google.DefaultClient(ctx, compute.CloudPlatformScope)
-	if err != nil {
-		return nil, err
+	c, err := google.DefaultClient(context.Background(), compute.CloudPlatformScope)
+	if e, ok := err.(*googleapi.Error); ok {
+		return nil, NewGoogleApplicationError(e)
 	}
 
 	computeService, err := compute.New(c)
-	if err != nil {
-		return nil, err
+	if e, ok := err.(*googleapi.Error); ok {
+		return nil, NewGoogleApplicationError(e)
 	}
 
 	manager := FirewallRuleClient{}
 	manager.computeService = computeService
-	return &manager, err
+	return &manager, nil
 }
 
 // ListFirewallRule returns given project's firewall rule
 func (f *FirewallRuleClient) ListFirewallRule(project string) ([]*compute.Firewall, error) {
-	ctx := context.Background()
-
 	req := f.computeService.Firewalls.List(project)
 
 	var firewallRuleList []*compute.Firewall
 
-	if err := req.Pages(ctx, func(page *compute.FirewallList) error {
+	err := req.Pages(context.Background(), func(page *compute.FirewallList) error {
 		for _, firewall := range page.Items {
 			firewallRuleList = append(firewallRuleList, firewall)
 		}
 		return nil
-	}); err != nil {
-		return nil, err
+	})
+	if e, ok := err.(*googleapi.Error); ok {
+		return nil, NewGoogleApplicationError(e)
 	}
+
 	return firewallRuleList, nil
 }
 
 // GetFirewallRule returns firewall rule matching given project and name
 func (f *FirewallRuleClient) GetFirewallRule(project, name string) (*compute.Firewall, error) {
-	ctx := context.Background()
-	return f.computeService.Firewalls.Get(project, name).Context(ctx).Do()
-
+	rules, err := f.computeService.Firewalls.Get(project, name).Context(context.Background()).Do()
+	if e, ok := err.(*googleapi.Error); ok {
+		return nil, NewGoogleApplicationError(e)
+	}
+	return rules, nil
 }
 
 // CreateFirewallRule create given firewall rule on given project
 func (f *FirewallRuleClient) CreateFirewallRule(project string, rule *compute.Firewall) (*compute.Firewall, error) {
 	_, err := f.computeService.Firewalls.Insert(project, rule).Context(context.Background()).Do()
-	if err != nil {
-		return nil, err
+	if e, ok := err.(*googleapi.Error); ok {
+		return nil, NewGoogleApplicationError(e)
 	}
 
 	return f.GetFirewallRule(project, rule.Name)
@@ -94,5 +96,8 @@ func (f *FirewallRuleClient) CreateFirewallRule(project string, rule *compute.Fi
 // DeleteFirewallRule delete firewall rule matching given project and name
 func (f *FirewallRuleClient) DeleteFirewallRule(project string, name string) error {
 	_, err := f.computeService.Firewalls.Delete(project, name).Context(context.Background()).Do()
+	if e, ok := err.(*googleapi.Error); ok {
+		return NewGoogleApplicationError(e)
+	}
 	return err
 }
