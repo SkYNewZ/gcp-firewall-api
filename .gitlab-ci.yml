@@ -3,9 +3,6 @@ stages:
   - build
   - deploy
 
-variables:
-  PROJECT: int-lz1-dtp
-
 .template: &template
   tags:
     - adeo-cloud
@@ -14,7 +11,9 @@ variables:
   - vault version
   - gcloud version
   - export VAULT_TOKEN=$(vault write -field=token auth/approle/login role_id=$VAULT_ROLE_ID secret_id=$VAULT_SECRET_ID)
-  - vault kv get -field=service_account_key secret/gcp-firewall-api | gcloud auth activate-service-account --key-file=-
+  - vault kv get -field=service_account_key secret/gcp-firewall-api/${PROJECT} | gcloud auth activate-service-account --key-file=-
+  - gcloud config set project ${PROJECT}
+  - export EXECUTOR_SA=$(vault kv get -field=executor secret/gcp-firewall-api/${PROJECT})
 
 Go format:
   <<: *template
@@ -52,14 +51,14 @@ Build docker image:
   services:
     - docker:19.03.8-dind
   script:
-    - docker build --tag gcr.io/${PROJECT}/gcp-firewall-api:latest .
-    - docker save gcr.io/${PROJECT}/gcp-firewall-api:latest > image.tar
+    - docker build --tag gcp-firewall-api:latest .
+    - docker save gcp-firewall-api:latest > image.tar
   artifacts:
     paths:
       - image.tar
     expire_in: 1 hrs
 
-Google Cloud Run:
+.deploy-template: &deploy-template
   <<: *template
   stage: deploy
   image: adeo-docker-adeo-iaaswecan-dev.jfrog.io/iwc-gcloud-vault-terraform:alpine
@@ -70,9 +69,22 @@ Google Cloud Run:
     - gcloud auth configure-docker --quiet
     - export VERSION=$(git describe --tags --exact-match 2>/dev/null || git describe --tags 2>/dev/null || echo "v0.0.0-${CI_COMMIT_SHORT_SHA}")
     - docker load -i image.tar
+    - docker tag gcp-firewall-api:latest gcr.io/${PROJECT}/gcp-firewall-api:latest
   script:
     - docker push gcr.io/${PROJECT}/gcp-firewall-api:latest
     - docker tag gcr.io/${PROJECT}/gcp-firewall-api:latest gcr.io/${PROJECT}/gcp-firewall-api:${VERSION}
     - docker push gcr.io/${PROJECT}/gcp-firewall-api:${VERSION}
-    - gcloud run deploy --image gcr.io/${PROJECT}/gcp-firewall-api:${VERSION} gcp-firewall-api --platform managed --quiet --region europe-west1 --project ${PROJECT}
+    - gcloud run deploy --image gcr.io/${PROJECT}/gcp-firewall-api:${VERSION} gcp-firewall-api --platform=managed --region=europe-west1 --service-account=${EXECUTOR_SA} --quiet
   dependencies: ["Build docker image"]
+
+Google Cloud Run Production:
+  <<: *deploy-template
+  variables:
+    PROJECT: landing-zone-factory-csp-ip
+  only:
+    - master
+
+Google Cloud Run Intégration:
+  <<: *deploy-template
+  variables:
+    PROJECT: iwc-factory-integration
